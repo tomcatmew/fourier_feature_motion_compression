@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import math
 
+
 class MLP(nn.Module):
     def __init__(self, depth=4, mapping_size=512, hidden_size=256):
         super().__init__()
@@ -23,3 +24,7 @@ class MLP(nn.Module):
 def fourier_map(x, B):
     xp = torch.matmul(2 * math.pi * x, B)
     return torch.cat([torch.sin(xp), torch.cos(xp)], dim=-1)
+
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

@@ -15,14 +15,17 @@ if __name__ == "__main__":
                       '#c7c7c7', '#bcbd22', '#dbdb8d', '#17becf', '#9edae5']
     test_parameter = [2, 4, 8, 16, 32, 64, 128, 256]
     plt_labels = []
-    for i in test_parameter:
-        plt_labels.append("B = " + str(i))
+    plt_loss = []
+    # for i in test_parameter:
+    #     plt_labels.append("B = " + str(i))
 
     path = os.path.join(os.getcwd(), "asset", "126_14_stretch.bvh")
     data = extract_bvh_array.extract_bvh_array(path)
     data_q = numpy.zeros((data.shape[0], int(data.shape[1] / 3) * 4 - 1))
     print(data.shape)
     print(data_q.shape)
+    print(data_q.shape[0] * data_q.shape[0])
+    total_floats = data_q.shape[0] * data_q.shape[0]
 
     line_count = 0
     for i in data:
@@ -47,18 +50,23 @@ if __name__ == "__main__":
         x, y = torch.tensor(train_data[0]).reshape(-1, 2), torch.tensor(train_data[1]).reshape(-1, 127)
         x, y = x.float().cuda(), y.float().cuda()
 
-        model = fourier_feature_network.MLP(mapping_size=test_parameter[hyper_para_b] * 2).cuda()
+        if test_parameter[hyper_para_b] == 2:
+            model = fourier_feature_network.MLP(mapping_size=test_parameter[hyper_para_b]).cuda()
+        else:
+            model = fourier_feature_network.MLP(mapping_size=test_parameter[hyper_para_b] * 2).cuda()
         opt = torch.optim.Adam(model.parameters(), lr=1e-4)
         loss = nn.MSELoss()
 
-        B = torch.randn(2, test_parameter[hyper_para_b]).cuda() * 10
-
-        input_x = fourier_feature_network.fourier_map(x, B)
+        if test_parameter[hyper_para_b] == 2:
+            input_x = x
+        else:
+            B = torch.randn(2, test_parameter[hyper_para_b]).cuda() * 10
+            input_x = fourier_feature_network.fourier_map(x, B)
 
         running_loss_list = []
         running_loss = 0.0
         running_correct = 0.0
-        for i in tqdm(range(300)):
+        for i in tqdm(range(4000)):
             ypred = model(input_x)
             l = loss(ypred, y)
             opt.zero_grad()
@@ -76,9 +84,14 @@ if __name__ == "__main__":
         evaluate_y = y_predict.data.cpu().numpy()
         # numpy.savetxt("output_bvh", evaluate_y, fmt='%.6f')
 
-        plt.plot(running_loss_list, color=color_sequence[hyper_para_b])
-
-    plt.legend(plt_labels)
-    plt.xlabel("Training Iterations")
+        # plt.plot(running_loss_list, color=color_sequence[hyper_para_b])
+        plt_loss.append(running_loss_list[-1])
+        plt_labels.append(fourier_feature_network.count_parameters(model))
+    print(plt_labels)
+    print(plt_loss)
+    plt.plot(plt_labels, plt_loss, '--ro')
+    # plt.legend(str(total_floats))
+    plt.title('Total float values in Original BVH : ' + str(total_floats))
+    plt.xlabel("# of parameters")
     plt.ylabel("MSELoss")
     plt.show()
