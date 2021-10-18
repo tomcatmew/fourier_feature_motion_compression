@@ -1,6 +1,7 @@
 import os, sys
 import numpy
 import matplotlib.pyplot as plt
+from scipy.fftpack import dct
 import extract_bvh_array
 
 if __name__ == "__main__":
@@ -9,18 +10,35 @@ if __name__ == "__main__":
     joint_data = data[1:,3:]
     print(data.shape, joint_data.shape,joint_data.size)
 
+    # history of principal mode
     mean_joint_data = joint_data - joint_data.mean(axis=0)
     eig_val, eig_vec = numpy.linalg.eig(mean_joint_data.transpose() @ mean_joint_data)
-    eig_vec0 = eig_vec[:,0]
-    history0 = mean_joint_data @ eig_vec0
-    fk = numpy.fft.fft(history0)
-    freq = numpy.fft.fftfreq(history0.shape[0])
-    plt.plot(history0)
+    fig, ax = plt.subplots()
+    history0 = mean_joint_data @ eig_vec[:,0]
+    history1 = mean_joint_data @ eig_vec[:,1]
+    history2 = mean_joint_data @ eig_vec[:,2]
+    ax.plot(history0,label="1st")
+    ax.plot(history1,label="2nd")
+    ax.plot(history2,label="3rd")
+    ax.legend(loc=0)
     plt.show()
 
+    # fft
+    '''
+    fk = numpy.fft.fft(history0)
+    freq = numpy.fft.fftfreq(history0.shape[0])
     # plt.plot(freq,fk)
     # plt.xlim(-0.1,+0.1)
     plt.plot(fk)
+    plt.show()
+    '''
+
+    # dct
+    fig, ax = plt.subplots()
+    ax.plot(dct(history0),label="1st")
+    ax.plot(dct(history1),label="2nd")
+    ax.plot(dct(history2),label="3rd")
+    ax.legend(loc=0)
     plt.show()
 
     U, s, V = numpy.linalg.svd(joint_data, full_matrices=True)
