@@ -16,6 +16,8 @@ if __name__ == "__main__":
     test_parameter = [2, 4, 8, 16, 32, 64, 128, 256]
     plt_labels = []
     plt_loss = []
+    normal_a = 10.0
+    normal_b = 0.0
     # for i in test_parameter:
     #     plt_labels.append("B = " + str(i))
 
@@ -50,18 +52,14 @@ if __name__ == "__main__":
         x, y = torch.tensor(train_data[0]).reshape(-1, 2), torch.tensor(train_data[1]).reshape(-1, 127)
         x, y = x.float().cuda(), y.float().cuda()
 
-        if test_parameter[hyper_para_b] == 2:
-            model = fourier_feature_network.MLP(mapping_size=test_parameter[hyper_para_b]).cuda()
-        else:
-            model = fourier_feature_network.MLP(mapping_size=test_parameter[hyper_para_b] * 2).cuda()
+        model = fourier_feature_network.MLP(mapping_size=test_parameter[hyper_para_b] * 2).cuda()
         opt = torch.optim.Adam(model.parameters(), lr=1e-4)
         loss = nn.MSELoss()
 
-        if test_parameter[hyper_para_b] == 2:
-            input_x = x
-        else:
-            B = torch.randn(2, test_parameter[hyper_para_b]).cuda() * 10
-            input_x = fourier_feature_network.fourier_map(x, B)
+        # Sample B from normal distribution
+        Bf = torch.randn(1, test_parameter[hyper_para_b]).cuda() * normal_a + normal_b
+        B = Bf.repeat(2, 1)
+        input_x = fourier_feature_network.fourier_map(x, B)
 
         running_loss_list = []
         running_loss = 0.0
