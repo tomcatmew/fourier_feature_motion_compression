@@ -44,12 +44,12 @@ if __name__ == "__main__":
 
     # phase generator
     phase = numpy.linspace(0, 1, data.shape[0], endpoint=False)
-    phase_double = numpy.repeat(phase[:, numpy.newaxis], 2, axis=1)
+    phase = phase.reshape(-1,1)
 
     for hyper_para_b in range(len(test_parameter)):
-        train_data = [phase_double, data_q]
+        train_data = [phase, data_q]
 
-        x, y = torch.tensor(train_data[0]).reshape(-1, 2), torch.tensor(train_data[1]).reshape(-1, 127)
+        x, y = torch.tensor(train_data[0]).reshape(-1, 1), torch.tensor(train_data[1]).reshape(-1, 127)
         x, y = x.float().cuda(), y.float().cuda()
 
         model = fourier_feature_network.MLP(mapping_size=test_parameter[hyper_para_b] * 2).cuda()
@@ -57,8 +57,8 @@ if __name__ == "__main__":
         loss = nn.MSELoss()
 
         # Sample B from normal distribution
-        Bf = torch.randn(1, test_parameter[hyper_para_b]).cuda() * normal_a + normal_b
-        B = Bf.repeat(2, 1)
+        B = torch.randn(1, test_parameter[hyper_para_b]).cuda() * normal_a + normal_b
+
         input_x = fourier_feature_network.fourier_map(x, B)
 
         running_loss_list = []
