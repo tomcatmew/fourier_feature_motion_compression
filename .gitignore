@@ -35,3 +35,6 @@
 myenv
 venv
 __pycache__
+
+# Figure output directory
+**/figures/
