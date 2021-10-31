@@ -10,7 +10,7 @@ from torch.utils.data import TensorDataset, DataLoader
 class MLP(torch.nn.Module):
     def __init__(self, input_size, output_size, num_hidden_layer):
         super().__init__()
-        hidden_size = input_size * 3
+        hidden_size = input_size * 2
         layers = []
         layers.append(nn.Linear(input_size, hidden_size))
         #layers.append(nn.ReLU(inplace=True))
@@ -31,39 +31,68 @@ def count_parameters(model):
 def weighted_mse_loss(input, target, weight):
     return torch.sum((weight * (input - target)) ** 2)
 
-def main():
-    device = 'cpu'
-    #path = os.path.join( os.getcwd(), "asset", "03_04_walk_on_uneven_terrain.bvh")
-    #path = os.path.join( os.getcwd(), "asset", "walk.bvh")
-    #path = os.path.join( os.getcwd(), "asset", "03_02_walk_on_uneven_terrain.bvh")
-    #path = os.path.join( os.getcwd(), "asset", "03_01_walk_on_uneven_terrain.bvh")
-    path = os.path.join( os.getcwd(), "asset", "06_08.bvh")
-    np_trg = extract_bvh_array.extract_bvh_array(path)
-    np_trg = np_trg[1:,]
-    pt_trg = torch.from_numpy(np_trg).float()
-    print(pt_trg.shape)
+def copy_net_weights(
+    net,
+    net_pre):
 
-    np_weight = numpy.ones([np_trg.shape[1]])
-    np_weight[:3] = 10
-    pt_weight = torch.from_numpy(np_weight)
-    print(pt_weight.data)
+    n0 = net_pre.layers[0].weight.shape[1]
+    n1 = net_pre.layers[0].weight.shape[0]
+    with torch.no_grad():
+        net.layers[0].weight *= 0.01
+        net.layers[0].bias *= 0.01
+        net.layers[0].weight[:n1,:n0] = net_pre.layers[0].weight[:n1,:n0]
+        net.layers[0].bias[:n1] = net_pre.layers[0].bias[:n1]
+
+    if len(net.layers) < 3:
+        return
+
+    n2 = net_pre.layers[2].weight.shape[0]
+    with torch.no_grad():
+        net.layers[2].weight *= 0.01
+        net.layers[2].bias *= 0.01
+        net.layers[2].weight[:n2,:n1] = net_pre.layers[2].weight[:n2,:n1]
+        net.layers[2].bias[:n2] = net_pre.layers[2].bias[:n2]
+
+    if len(net.layers) < 5:
+        return
+
+    n3 = net_pre.layers[4].weight.shape[0]
+    with torch.no_grad():
+        net.layers[4].weight *= 0.01
+        net.layers[4].bias *= 0.01
+        net.layers[4].weight[:n3,:n2] = net_pre.layers[4].weight[:n3,:n2]
+        net.layers[4].bias[:n3] = net_pre.layers[4].bias[:n3]
+
+
+def compress(
+        np_trg:numpy.ndarray,
+        np_weights: numpy.ndarray,
+        nfreq:int):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    pt_trg = torch.from_numpy(np_trg).float()
+    pt_weight = torch.from_numpy(np_weights)
     pt_weight = pt_weight.to(device)
-    print(pt_weight.shape)
 
     cycles = []
-    for itr in range(7):
-        net = MLP(1+len(cycles)*2,np_trg.shape[1],num_hidden_layer=0)
+    approximations = []
+    nets = []
+    for itr in range(nfreq):
+        net = MLP(1+len(cycles)*2,np_trg.shape[1],num_hidden_layer=1)
+        if len(nets) > 0:
+            copy_net_weights(net,nets[-1])
+        nets.append(net)
         optimizer = torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-5)
         tmp_list = []
         tmp_list.append( torch.linspace(0.0, 1.0, pt_trg.shape[0], dtype=torch.float32) )
+        print("   cycles",cycles)
         for cycle in cycles:
             tmp_list.append( torch.sin(2.*math.pi*cycle*tmp_list[0]) )
             tmp_list.append( torch.cos(2.*math.pi*cycle*tmp_list[0]) )
         pt_in = torch.stack(tmp_list,dim=1) # pt_in.reshape([*pt_in.shape,1])
-        print(pt_in.shape)
+        print("   shape of mlp input: ",pt_in.shape)
         loader = DataLoader(TensorDataset(pt_in, pt_trg), batch_size=20, shuffle=True)
 
-        for iepoch in range((itr+1)*1000):
+        for iepoch in range((itr+1)*300):
             net.train()
             for sample_batched in loader:
                 batch_in = sample_batched[0].to(device)
@@ -81,33 +110,36 @@ def main():
                     print("   ",iepoch, loss.data.item())
 
         with torch.no_grad():
-            pt_out = net.forward(pt_in)
-            np_out = pt_out.numpy()
-            print(np_out.shape)
+            np_out = net.forward(pt_in).numpy()
 
-        path_save,_ = os.path.splitext(path)
-        path_save = path_save + "_{}.bvh".format(itr)
-        extract_bvh_array.swap_data_in_bvh(path_save, np_out, path)
-
+        approximations.append(np_out)
         np_diff = np_out - np_trg
-        # L0 norm
-        print("cycles",cycles)
         print("compression ratio: ",np_trg.size/count_parameters(net))
-        print("trans_diff:",np_diff[:,:3].max())
-        print("angle_diff:",np_diff[:,3:].max())
-
         # pca and dct
-        deviation = np_weight * (np_diff - np_diff.mean(axis=0))
+        deviation = np_weights * (np_diff - np_diff.mean(axis=0))
         eig_val, eig_vec = numpy.linalg.eig(deviation.transpose() @ deviation)
-        eig_vec = eig_vec.astype(numpy.float64)
+        eig_vec = eig_vec.real
         history0 = deviation @ eig_vec[:,0]
-        #plt.plot(history0)
-        #plt.show()
-        #print(numpy.abs(dct(history0)))
         new_cycle = numpy.abs(dct(history0)).argmax() * 0.5
+        print("new_cycle from DCT: ",new_cycle)
+        new_cycle += 0.25 * numpy.random.randn(1)[0]
         cycles.append(new_cycle)
+    return approximations, nets
 
-
+    #path_save,_ = os.path.splitext(path)
+    #path_save = path_save + "_{}.bvh".format(itr)
+    #extract_bvh_array.swap_data_in_bvh(path_save, np_out, path)
+    #print("trans_diff:",np_diff[:,:3].max())
+    #print("angle_diff:",np_diff[:,3:].max())
+    #plt.plot(history0)
+    #plt.show()
+    #print(numpy.abs(dct(history0)))
 
 if __name__ == "__main__":
-    main()
+    path = os.path.join( os.getcwd(), "asset", "06_08.bvh")
+    np_trg = extract_bvh_array.extract_bvh_array(path)
+    np_trg = np_trg[1:,]
+    np_weight = numpy.ones([np_trg.shape[1]])
+    np_weight[:3] = 10
+    apps = compress(np_trg, np_weight, 3)
+
