@@ -5,6 +5,9 @@ import numpy
 
 sys.path.append(os.path.join(
     os.path.dirname(__file__), 'external', 'delfem2-python-bindings'))
+print(__file__)
+print(sys.path)
+import delfem2
 from delfem2.delfem2 import BVH
 from delfem2.delfem2 import get_parameter_history_bvh
 from delfem2.delfem2 import get_joint_position_history_bvh
@@ -21,6 +24,8 @@ def compress_cmu(path_dir):
     print("path_dir: ",path_dir)
     print("num_bvh: ",len(bvh_paths))
     print("bvh_paths: ",bvh_paths)
+    with open('log.csv', 'w'):
+        pass
     for bvh_path in bvh_paths:
         print("#######################")
         bvh = BVH(bvh_path)
@@ -34,14 +39,18 @@ def compress_cmu(path_dir):
         for inet in range(len(nets)):
             app = apps[inet]
             np_diff = app - np_trg
-            print("##")
-            print("  compression ratio: ",count_parameters(nets[inet])/np_trg.size)
-            print("  trans_diff:     ",np_diff[:,:3].max())
-            print("  angle_diff:     ",np_diff[:,3:].max())
             set_parameter_history_bvh_double(bvh, app.astype(numpy.float64))
             frame_jp1 = get_joint_position_history_bvh(bvh)
+            cmp_ratio = np_trg.size / count_parameters(nets[inet])
+            jnt_diff_ratio = (frame_jp0-frame_jp1).max() / scale
+            print("##")
+            print("  compression ratio: ",cmp_ratio)
+            print("  trans_diff:     ",np_diff[:,:3].max())
+            print("  angle_diff:     ",np_diff[:,3:].max())
             # print("  joint diff l2   ", numpy.linalg.norm(frame_jp0-frame_jp1))
-            print("  joint diff l0   ", (frame_jp0-frame_jp1).max())
+            print("  joint diff l0   ", jnt_diff_ratio)
+            with open('log.csv', 'a') as f:
+                f.write(os.path.basename(bvh_path)+","+str(cmp_ratio)+","+str(jnt_diff_ratio)+"\n")
 
 
 def test0(path_dir):
@@ -61,6 +70,7 @@ def test0(path_dir):
 
 
 if __name__ == "__main__":
-    path_dir = '/Volumes/CmuMoCap'
+    # path_dir = '/Volumes/CmuMoCap'
     # test0(path_dir)
+    path_dir = '/media/nobuyuki/CmuMoCap'
     compress_cmu(path_dir)

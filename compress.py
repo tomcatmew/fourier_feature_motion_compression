@@ -69,18 +69,20 @@ def compress(
         np_weights: numpy.ndarray,
         nfreq:int):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    pt_trg = torch.from_numpy(np_trg).float()
+    pt_trg = torch.from_numpy(np_trg).float().to(device)
     pt_weight = torch.from_numpy(np_weights)
     pt_weight = pt_weight.to(device)
 
     cycles = []
     approximations = []
     nets = []
+
     for itr in range(nfreq):
         net = MLP(1+len(cycles)*2,np_trg.shape[1],num_hidden_layer=1)
         if len(nets) > 0:
             copy_net_weights(net,nets[-1])
-        nets.append(net)
+        nets.append(net.cpu())
+        net = net.to(device)
         optimizer = torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-5)
         tmp_list = []
         tmp_list.append( torch.linspace(0.0, 1.0, pt_trg.shape[0], dtype=torch.float32) )
@@ -88,9 +90,9 @@ def compress(
         for cycle in cycles:
             tmp_list.append( torch.sin(2.*math.pi*cycle*tmp_list[0]) )
             tmp_list.append( torch.cos(2.*math.pi*cycle*tmp_list[0]) )
-        pt_in = torch.stack(tmp_list,dim=1) # pt_in.reshape([*pt_in.shape,1])
+        pt_in = torch.stack(tmp_list,dim=1).to(device)  # pt_in.reshape([*pt_in.shape,1])
         print("   shape of mlp input: ",pt_in.shape)
-        loader = DataLoader(TensorDataset(pt_in, pt_trg), batch_size=20, shuffle=True)
+        loader = DataLoader(TensorDataset(pt_in, pt_trg), batch_size=100, shuffle=True)
 
         for iepoch in range((itr+1)*300):
             net.train()
@@ -110,7 +112,7 @@ def compress(
                     print("   ",iepoch, loss.data.item())
 
         with torch.no_grad():
-            np_out = net.forward(pt_in).numpy()
+            np_out = net.forward(pt_in).cpu().numpy()
 
         approximations.append(np_out)
         np_diff = np_out - np_trg
