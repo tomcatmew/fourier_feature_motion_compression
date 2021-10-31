@@ -2,7 +2,7 @@ import glob
 import os
 import sys
 import numpy
-
+import torch
 sys.path.append(os.path.join(
     os.path.dirname(__file__), 'external', 'delfem2-python-bindings'))
 print(__file__)
@@ -34,7 +34,29 @@ def compress_cmu(path_dir):
         np_trg = get_parameter_history_bvh(bvh)[1:,:]  # skip the first frame
         print(np_trg.shape, np_trg.dtype)
         frame_jp0 = get_joint_position_history_bvh(bvh)[1:,:,:] # skip the first frame
-        apps, nets = compress.compress(np_trg,np_weights,5)
+
+        cycles = []
+        net = None
+        for itr in range(12):
+            net_new = compress.MLP(1+len(cycles)*2,np_trg.shape[1],num_hidden_layer=1)
+            if net is not None:
+                compress.copy_net_weights(net_new, net)
+            net = net_new
+            np_out = compress.compress(net, cycles, np_trg,np_weights)
+            cycles.append( compress.new_cycle(np_out-np_trg, np_weights) )
+            # convergene
+            set_parameter_history_bvh_double(bvh, np_out.astype(numpy.float64))
+            frame_jp1 = get_joint_position_history_bvh(bvh)
+            jnt_diff_ratio = (frame_jp0-frame_jp1).max() / scale
+            cmp_ratio = np_trg.size / count_parameters(net)
+            print(itr, cmp_ratio, jnt_diff_ratio)
+            if jnt_diff_ratio < 0.01:
+                break
+
+        with open('log.csv', 'a') as f:
+            f.write(os.path.basename(bvh_path)+","+str(cmp_ratio)+","+str(jnt_diff_ratio)+"\n")
+
+        '''
         assert len(apps) == len(nets)
         for inet in range(len(nets)):
             app = apps[inet]
@@ -51,7 +73,7 @@ def compress_cmu(path_dir):
             print("  joint diff l0   ", jnt_diff_ratio)
             with open('log.csv', 'a') as f:
                 f.write(os.path.basename(bvh_path)+","+str(cmp_ratio)+","+str(jnt_diff_ratio)+"\n")
-
+        '''
 
 def test0(path_dir):
     bvh_paths = glob.glob(path_dir + '/*/*/*.bvh')
@@ -70,7 +92,7 @@ def test0(path_dir):
 
 
 if __name__ == "__main__":
-    # path_dir = '/Volumes/CmuMoCap'
+    path_dir = '/Volumes/CmuMoCap'
     # test0(path_dir)
-    path_dir = '/media/nobuyuki/CmuMoCap'
+    # path_dir = '/media/nobuyuki/CmuMoCap'
     compress_cmu(path_dir)
