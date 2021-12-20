@@ -39,3 +39,7 @@ __pycache__
 # Figure output directory
 **/figures/
 *.csv
+
+result/
+result0/
+.DS_Store

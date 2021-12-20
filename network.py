@@ -1,5 +1,5 @@
 import os, math
-import extract_bvh_array
+# import extract_bvh_array
 import numpy
 from scipy.fftpack import dct
 import matplotlib.pyplot as plt
@@ -91,7 +91,8 @@ def compress(
     pt_trg = torch.from_numpy(np_trg).float().to(device)
     pt_weight = torch.from_numpy(np_weights).to(device)
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-5)
+
     pt_in = model_input(cycles, np_trg.shape[0]).to(device)
     # print("   shape of mlp input: ",pt_in.shape)
     loader = DataLoader(TensorDataset(pt_in, pt_trg), batch_size=100, shuffle=True)

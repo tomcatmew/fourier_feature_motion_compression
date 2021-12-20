@@ -8,7 +8,7 @@ if __name__ == "__main__":
     path = os.path.join( os.getcwd(), "asset", "walk.bvh")
     data = extract_bvh_array.extract_bvh_array(path)
     joint_data = data[1:,3:]
-    print(data.shape, joint_data.shape,joint_data.size)
+    print(data.shape, joint_data.shape,joint_data.size)  b90bn
 
     # history of principal mode
     mean_joint_data = joint_data - joint_data.mean(axis=0)
